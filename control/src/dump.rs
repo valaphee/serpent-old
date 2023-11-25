@@ -7,12 +7,13 @@ use std::{
 };
 
 use eframe::egui;
+use log::{debug, warn};
 use windows::Win32::{
     Foundation::{FALSE, HANDLE, MAX_PATH},
     System::{
         Diagnostics::Debug::{
             ReadProcessMemory, IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_EXPORT,
-            IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER,
+            IMAGE_NT_HEADERS64, IMAGE_SCN_MEM_WRITE, IMAGE_SECTION_HEADER,
         },
         ProcessStatus::{EnumProcessModules, GetModuleFileNameExW, GetModuleInformation},
         SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY},
@@ -36,6 +37,7 @@ impl Dump {
         let process;
         let mut modules = Vec::new();
         unsafe {
+            debug!("Opening process {process_id}...");
             process = OpenProcess(
                 PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
                 FALSE,
@@ -70,6 +72,12 @@ impl Dump {
                 )
                 .unwrap();
 
+                debug!(
+                    "Copying image of module {} 0x{:x}-0x{:x}",
+                    path.to_str().unwrap(),
+                    module_info.lpBaseOfDll as usize,
+                    module_info.lpBaseOfDll as usize + module_info.SizeOfImage as usize
+                );
                 let mut image = vec![0u8; module_info.SizeOfImage as usize];
                 if ReadProcessMemory(
                     process,
@@ -80,6 +88,7 @@ impl Dump {
                 )
                 .is_err()
                 {
+                    warn!("Failed to copy image");
                     continue;
                 }
 
@@ -146,8 +155,8 @@ impl Dump {
                 if ui.button("Save").clicked() {
                     if let Some(path) = rfd::FileDialog::new().save_file() {
                         self.relocate();
-                        self.import_search();
-                        self.string_obfuscation();
+                        //self.import_search();
+                        //self.string_obfuscation();
                         std::fs::write(path, self.build()).unwrap();
                     }
                 }
@@ -162,41 +171,32 @@ impl Dump {
 
         let mut result = vec![];
         unsafe {
-            let image = &module.image;
-            let image_ptr = image.as_ptr() as usize;
-            let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
-            let nt_headers =
-                &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
-
             // Use image file header because image header might be altered
-            let file_dos_headers = &*(image_file_ptr as *const IMAGE_DOS_HEADER);
-            let file_nt_headers = &*((image_file_ptr + file_dos_headers.e_lfanew as usize)
-                as *const IMAGE_NT_HEADERS64);
-            let file_sections = std::slice::from_raw_parts(
-                addr_of!(*file_nt_headers).add(1) as *const IMAGE_SECTION_HEADER,
-                file_nt_headers.FileHeader.NumberOfSections as usize,
+            let dos_headers = &*(image_file_ptr as *const IMAGE_DOS_HEADER);
+            let nt_headers =
+                &*((image_file_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
+            let sections = std::slice::from_raw_parts(
+                addr_of!(*nt_headers).add(1) as *const IMAGE_SECTION_HEADER,
+                nt_headers.FileHeader.NumberOfSections as usize,
             );
 
-            // Preserve header, don't trust the image header
-            result.extend_from_slice(
-                &image_file[..file_nt_headers.OptionalHeader.SizeOfHeaders as usize],
-            );
+            // Copy header
+            result
+                .extend_from_slice(&image_file[..nt_headers.OptionalHeader.SizeOfHeaders as usize]);
 
             // Copy sections
-            for section in file_sections {
+            for section in sections {
                 // Preserve sections which are intended and expected to be changed
                 result.extend_from_slice(
-                    &module.image[section.VirtualAddress as usize..]
-                        [..section.SizeOfRawData as usize],
-                )
+                    if section.Characteristics.contains(IMAGE_SCN_MEM_WRITE) {
+                        &image_file[section.PointerToRawData as usize..]
+                            [..section.SizeOfRawData as usize]
+                    } else {
+                        &module.image[section.VirtualAddress as usize..]
+                            [..section.SizeOfRawData as usize]
+                    },
+                );
             }
-
-            // Fix base address in preserved header
-            let result_ptr = result.as_ptr() as usize;
-            let result_dos_headers = &*(result_ptr as *const IMAGE_DOS_HEADER);
-            let mut result_nt_headers = &mut *((result_ptr + result_dos_headers.e_lfanew as usize)
-                as *mut IMAGE_NT_HEADERS64);
-            result_nt_headers.OptionalHeader.ImageBase = nt_headers.OptionalHeader.ImageBase;
         }
         result
     }

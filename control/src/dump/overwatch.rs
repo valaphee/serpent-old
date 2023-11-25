@@ -114,7 +114,7 @@ impl OverwatchDumpExt for Dump {
                 )
                 .unwrap();
 
-            // Calculate vas
+            // Calculate addresses
             for address in &mut iat.iter_mut() {
                 if *address == 0 {
                     continue;
@@ -143,7 +143,7 @@ impl OverwatchDumpExt for Dump {
                     warn!("No dll exporting 0x{:x}", iat[0]);
                     continue;
                 };
-                debug!("Dll: {}", module.path.to_str().unwrap());
+                debug!("Found dll {}", module.path.to_str().unwrap());
 
                 // Add new import descriptor
                 import_descriptors.push(IMAGE_IMPORT_DESCRIPTOR {
@@ -187,14 +187,15 @@ impl OverwatchDumpExt for Dump {
                     };
                     if name == b"\0" {
                         warn!(
-                            "Dll {} not exporting 0x{:x}",
+                            "Dll {} not exporting 0x{:016X}",
                             module.path.to_str().unwrap(),
                             address
                         );
                     } else {
                         debug!(
-                            "Dll export: {}",
+                            "Found dll export {} 0x{:016X}",
                             std::str::from_utf8(&name[..name.len() - 1]).unwrap()
+                            address
                         );
                     }
                     import_thunks.push(import_names.len());
