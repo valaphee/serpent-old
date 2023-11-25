@@ -11,7 +11,7 @@ mod util;
 fn main() -> Result<(), eframe::Error> {
     let mut options = eframe::NativeOptions::default();
     options.viewport = egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]);
-    eframe::run_native("Serpent", options, Box::new(|cc| Box::<App>::default()))
+    eframe::run_native("Serpent", options, Box::new(|_cc| Box::<App>::default()))
 }
 
 struct App {

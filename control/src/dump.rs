@@ -15,17 +15,9 @@ use windows::Win32::{
     },
 };
 
-use crate::util::unique_id;
-
 #[derive(Default)]
 pub struct DumpView {
     modules: Vec<Module>,
-}
-
-struct Module {
-    path: PathBuf,
-    image: Vec<u8>,
-    image_file: Option<Vec<u8>>,
 }
 
 impl DumpView {
@@ -83,6 +75,7 @@ impl DumpView {
                     path,
                     image,
                     image_file: None,
+                    image_base: format!("0x{:016X}", module_info.lpBaseOfDll as usize),
                 });
             }
 
@@ -94,18 +87,58 @@ impl DumpView {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
-        ui.vertical_centered_justified(|ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    egui::Grid::new(unique_id!()).show(ui, |ui| {
-                        for module in &self.modules {
-                            ui.label(module.path.to_str().unwrap());
-                            ui.end_row();
-                        }
+        ui.vertical(|ui| {
+            egui_extras::TableBuilder::new(ui)
+                .striped(true)
+                .auto_shrink([false, true])
+                .column(egui_extras::Column::auto().resizable(true))
+                .column(egui_extras::Column::auto().resizable(true))
+                .column(egui_extras::Column::remainder())
+                .header(12.0, |mut header| {
+                    header.col(|ui| {
+                        ui.label("Path");
+                    });
+                    header.col(|ui| {
+                        ui.label("Base");
+                    });
+                    header.col(|ui| {
+                        ui.label("Size");
+                    });
+                })
+                .body(|body| {
+                    body.rows(12.0, self.modules.len(), |i, mut row| {
+                        let module = &self.modules[i];
+                        row.col(|ui| {
+                            ui.add(egui::Label::new(module.path.to_str().unwrap()).wrap(false));
+                        });
+                        row.col(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&module.image_base).monospace(),
+                                )
+                                .wrap(false),
+                            );
+                        });
+                        row.col(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("0x{:X}", module.image.len()))
+                                        .monospace(),
+                                )
+                                .wrap(false),
+                            );
+                        });
                     });
                 });
             ui.button("Dump");
         });
     }
+}
+
+struct Module {
+    path: PathBuf,
+    image: Vec<u8>,
+    image_file: Option<Vec<u8>>,
+
+    image_base: String,
 }

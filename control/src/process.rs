@@ -21,11 +21,6 @@ pub struct ProcessOverviewView {
     pub value: Option<NonZeroU32>,
 }
 
-struct Process {
-    id: u32,
-    path: PathBuf,
-}
-
 impl Default for ProcessOverviewView {
     fn default() -> Self {
         let mut _self = Self {
@@ -119,4 +114,9 @@ impl ProcessOverviewView {
             }
         }
     }
+}
+
+struct Process {
+    id: u32,
+    path: PathBuf,
 }
