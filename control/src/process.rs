@@ -22,24 +22,27 @@ pub struct ProcessOverviewWindow {
 }
 
 impl ProcessOverviewWindow {
-    pub fn show(&self, ctx: &egui::Context) -> Option<NonZeroU32> {
+    pub fn value(&self) -> Option<NonZeroU32> {
+        self.inner.lock().unwrap().value
+    }
+
+    pub fn show(&self, ctx: &egui::Context) {
         let inner = self.inner.clone();
         ctx.show_viewport_deferred(
             egui::ViewportId::from_hash_of("ProcessOverviewWindow"),
             egui::ViewportBuilder::default()
-                .with_title("Process Overview")
+                .with_title("Open Process")
                 .with_inner_size([400.0, 600.0]),
             move |ctx, class| {
                 inner.lock().unwrap().show(ctx);
             },
         );
-        self.inner.lock().unwrap().result
     }
 }
 
 struct ProcessOverviewWindowInner {
     items: Vec<ProcessOverview>,
-    result: Option<NonZeroU32>,
+    value: Option<NonZeroU32>,
 }
 
 struct ProcessOverview {
@@ -51,7 +54,7 @@ impl Default for ProcessOverviewWindowInner {
     fn default() -> Self {
         let mut _self = Self {
             items: Default::default(),
-            result: Default::default(),
+            value: Default::default(),
         };
         _self.refresh();
         _self
@@ -59,9 +62,9 @@ impl Default for ProcessOverviewWindowInner {
 }
 
 impl ProcessOverviewWindowInner {
-    pub fn show(&mut self, ctx: &egui::Context) {
+    fn show(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.viewport().close_requested()) {
-            self.result = NonZeroU32::new(u32::MAX);
+            self.value = NonZeroU32::new(u32::MAX);
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.refresh();
@@ -86,7 +89,8 @@ impl ProcessOverviewWindowInner {
                         let item = &self.items[i];
                         row.col(|ui| {
                             if ui.selectable_label(false, item.id.to_string()).clicked() {
-                                self.result = NonZeroU32::new(item.id);
+                                self.value = NonZeroU32::new(item.id);
+                                ctx.request_repaint_of(egui::ViewportId::default());
                             }
                         });
                         row.col(|ui| {
@@ -146,3 +150,5 @@ impl ProcessOverviewWindowInner {
         }
     }
 }
+
+
