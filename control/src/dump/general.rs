@@ -36,25 +36,12 @@ impl GeneralDumpExt for Dump {
                 nt_headers.FileHeader.NumberOfSections as usize,
             );
 
-            // Go through all base relocations, zero-terminated
             let mut base_relocation = &*((image_ptr
                 + basereloc_data_directory.VirtualAddress as usize)
                 as *const IMAGE_BASE_RELOCATION);
             while base_relocation != &IMAGE_BASE_RELOCATION::default() {
-                // Get section containing the base relocation for the chunk, and convert it to
-                // file offset
-                let section = sections
-                    .iter()
-                    .find(|section| {
-                        section.VirtualAddress <= base_relocation.VirtualAddress
-                            && section.VirtualAddress + section.SizeOfRawData
-                                > base_relocation.VirtualAddress
-                    })
-                    .unwrap();
-                let file_offset = (base_relocation.VirtualAddress - section.VirtualAddress
-                    + section.PointerToRawData) as usize;
+                let file_offset = rva_to_file_offset(sections, base_relocation.VirtualAddress);
 
-                // Update addresses in image
                 let relocations = std::slice::from_raw_parts(
                     addr_of!(*base_relocation).add(1) as *const u16,
                     (base_relocation.SizeOfBlock as usize - size_of_val(&base_relocation))
@@ -77,4 +64,15 @@ impl GeneralDumpExt for Dump {
             }
         }
     }
+}
+
+fn rva_to_file_offset(sections: &[IMAGE_SECTION_HEADER], address: u32) -> usize {
+    let section = sections
+        .iter()
+        .find(|section| {
+            section.VirtualAddress <= address
+                && section.VirtualAddress + section.SizeOfRawData > address
+        })
+        .unwrap();
+    (address - section.VirtualAddress + section.PointerToRawData) as usize
 }

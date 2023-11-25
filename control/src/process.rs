@@ -50,7 +50,7 @@ impl ProcessOverview {
                     ui.label("Name");
                 });
             })
-            .body(|mut body| {
+            .body(|body| {
                 body.rows(12.0, self.items.len(), |i, mut row| {
                     let item = &self.items[i];
                     row.col(|ui| {

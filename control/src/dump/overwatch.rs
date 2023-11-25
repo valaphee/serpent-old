@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     ffi::c_void,
     io::Write,
-    mem::{size_of, size_of_val, transmute},
+    mem::{size_of, size_of_val},
     ptr::addr_of,
 };
 
@@ -14,13 +14,17 @@ use unicorn_engine::{
 };
 use windows::Win32::System::{
     Diagnostics::Debug::{
-        ReadProcessMemory, IMAGE_DIRECTORY_ENTRY_IAT, IMAGE_DIRECTORY_ENTRY_IMPORT,
-        IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER,
+        ReadProcessMemory, IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_EXPORT,
+        IMAGE_DIRECTORY_ENTRY_IAT, IMAGE_DIRECTORY_ENTRY_IMPORT, IMAGE_NT_HEADERS64,
+        IMAGE_SECTION_HEADER,
     },
-    SystemServices::{IMAGE_DOS_HEADER, IMAGE_IMPORT_DESCRIPTOR, IMAGE_IMPORT_DESCRIPTOR_0},
+    SystemServices::{
+        IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY, IMAGE_IMPORT_DESCRIPTOR,
+        IMAGE_IMPORT_DESCRIPTOR_0,
+    },
 };
 
-use crate::dump::Dump;
+use crate::dump::{Dump, Module};
 
 pub trait OverwatchDumpExt {
     fn import_search(&mut self);
@@ -94,7 +98,7 @@ impl OverwatchDumpExt for Dump {
                 .unwrap();
 
             // Stop decoding when indirect jmp is reached
-            let mut decoder = Decoder::new(64, transmute(&heap[..]), DecoderOptions::NONE);
+            let mut decoder = Decoder::new(64, &heap[..], DecoderOptions::NONE);
             unicorn
                 .add_code_hook(
                     page_min as u64,
@@ -138,7 +142,7 @@ impl OverwatchDumpExt for Dump {
                 // Search for module containing the given address
                 let Some(module) = self.modules[1..]
                     .iter()
-                    .find(|module| module.contains(iat[0]))
+                    .find(|module| contains(module, iat[0]))
                 else {
                     warn!("No dll exporting 0x{:x}", iat[0]);
                     continue;
@@ -168,13 +172,14 @@ impl OverwatchDumpExt for Dump {
 
                 // Resolve imports by addresses pointing to exports
                 for &address in iat {
-                    let name = if let Some(name) = module.export_name_by_address(address) {
+                    let name = if let Some(name) = export_name_by_address(module, address) {
                         name
                     } else if let Some(forward_module) =
-                        self.modules.iter().find(|module| module.contains(address))
+                        self.modules.iter().find(|module| contains(module, address))
                     {
-                        if let Some(forward_name) = forward_module.export_name_by_address(address) {
-                            if let Some(name) = module.export_name_by_forward(forward_name) {
+                        if let Some(forward_name) = export_name_by_address(forward_module, address)
+                        {
+                            if let Some(name) = export_name_by_forward(module, forward_name) {
                                 name
                             } else {
                                 b"\0"
@@ -194,7 +199,7 @@ impl OverwatchDumpExt for Dump {
                     } else {
                         debug!(
                             "Found dll export {} 0x{:016X}",
-                            std::str::from_utf8(&name[..name.len() - 1]).unwrap()
+                            std::str::from_utf8(&name[..name.len() - 1]).unwrap(),
                             address
                         );
                     }
@@ -350,5 +355,119 @@ impl OverwatchDumpExt for Dump {
             image[i] = 0;
             i += length;
         }
+    }
+}
+
+fn contains(module: &Module, address: usize) -> bool {
+    unsafe {
+        let image_ptr = module.image.as_ptr() as usize;
+        let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
+        let nt_headers =
+            &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
+        address >= nt_headers.OptionalHeader.ImageBase as usize
+            && address < nt_headers.OptionalHeader.ImageBase as usize + module.image.len()
+    }
+}
+
+fn export_name_by_address(module: &Module, address: usize) -> Option<&[u8]> {
+    unsafe {
+        let image_ptr = module.image.as_ptr() as usize;
+        let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
+        let nt_headers =
+            &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
+        let export_data_directory = &*(&nt_headers.OptionalHeader.DataDirectory
+            [IMAGE_DIRECTORY_ENTRY_EXPORT.0 as usize]
+            as *const IMAGE_DATA_DIRECTORY);
+        let export_directory = &*((image_ptr + export_data_directory.VirtualAddress as usize)
+            as *const IMAGE_EXPORT_DIRECTORY);
+        let functions = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfFunctions as usize) as *const u32,
+            export_directory.NumberOfFunctions as usize,
+        );
+        let names = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfNames as usize) as *const u32,
+            export_directory.NumberOfNames as usize,
+        );
+        let name_ordinals = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfNameOrdinals as usize) as *const u16,
+            export_directory.NumberOfNames as usize,
+        );
+
+        for (&name, &name_ordinal) in names.iter().zip(name_ordinals) {
+            let function = nt_headers.OptionalHeader.ImageBase as usize
+                + functions[name_ordinal as usize] as usize;
+            if function != address {
+                continue;
+            }
+
+            let name_ptr = (image_ptr + name as usize) as *const u8;
+            let mut name_end_ptr = name_ptr;
+            while *name_end_ptr != 0 {
+                name_end_ptr = name_end_ptr.add(1)
+            }
+            let name_length = name_end_ptr.offset_from(name_ptr) as usize;
+            let name = std::slice::from_raw_parts(name_ptr, name_length + 1);
+            return Some(name);
+        }
+
+        None
+    }
+}
+
+fn export_name_by_forward<'a>(module: &'a Module, forward: &[u8]) -> Option<&'a [u8]> {
+    unsafe {
+        let image_ptr = module.image.as_ptr() as usize;
+        let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
+        let nt_headers =
+            &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
+        let export_data_directory = &*(&nt_headers.OptionalHeader.DataDirectory
+            [IMAGE_DIRECTORY_ENTRY_EXPORT.0 as usize]
+            as *const IMAGE_DATA_DIRECTORY);
+        let export_directory = &*((image_ptr + export_data_directory.VirtualAddress as usize)
+            as *const IMAGE_EXPORT_DIRECTORY);
+        let functions = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfFunctions as usize) as *const u32,
+            export_directory.NumberOfFunctions as usize,
+        );
+        let names = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfNames as usize) as *const u32,
+            export_directory.NumberOfNames as usize,
+        );
+        let name_ordinals = std::slice::from_raw_parts(
+            (image_ptr + export_directory.AddressOfNameOrdinals as usize) as *const u16,
+            export_directory.NumberOfNames as usize,
+        );
+
+        for (&name, &name_ordinal) in names.iter().zip(name_ordinals) {
+            let function = functions[name_ordinal as usize] as usize;
+            if function < export_data_directory.VirtualAddress as usize
+                || function
+                    >= (export_data_directory.VirtualAddress + export_data_directory.Size) as usize
+            {
+                continue;
+            }
+
+            let forward_name = std::slice::from_raw_parts(
+                (image_ptr + function) as *const u8,
+                function - export_data_directory.VirtualAddress as usize
+                    + export_data_directory.Size as usize,
+            );
+            let forward_dll_name_end = forward_name.iter().position(|&c| c == b'.').unwrap();
+            let forward_name_end = forward_name.iter().position(|&c| c == 0).unwrap();
+            if forward != &forward_name[forward_dll_name_end + 1..forward_name_end + 1] {
+                continue;
+            }
+
+            let name_ptr = (image_ptr + name as usize) as *const u8;
+            let mut name_end_ptr = name_ptr;
+            while *name_end_ptr != 0 {
+                name_end_ptr = name_end_ptr.add(1)
+            }
+            let name_length = name_end_ptr.offset_from(name_ptr) as usize;
+            let name = std::slice::from_raw_parts(name_ptr, name_length + 1);
+            return Some(name);
+        }
+
+        None
     }
 }

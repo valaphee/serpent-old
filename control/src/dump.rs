@@ -12,11 +12,10 @@ use windows::Win32::{
     Foundation::{FALSE, HANDLE, MAX_PATH},
     System::{
         Diagnostics::Debug::{
-            ReadProcessMemory, IMAGE_DATA_DIRECTORY, IMAGE_DIRECTORY_ENTRY_EXPORT,
-            IMAGE_NT_HEADERS64, IMAGE_SCN_MEM_WRITE, IMAGE_SECTION_HEADER,
+            ReadProcessMemory, IMAGE_NT_HEADERS64, IMAGE_SCN_MEM_WRITE, IMAGE_SECTION_HEADER,
         },
         ProcessStatus::{EnumProcessModules, GetModuleFileNameExW, GetModuleInformation},
-        SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY},
+        SystemServices::IMAGE_DOS_HEADER,
         Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
     },
 };
@@ -208,121 +207,4 @@ struct Module {
     image_file: Option<Vec<u8>>,
 
     image_base: String,
-}
-
-impl Module {
-    fn contains(&self, address: usize) -> bool {
-        unsafe {
-            let image_ptr = self.image.as_ptr() as usize;
-            let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
-            let nt_headers =
-                &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
-            address >= nt_headers.OptionalHeader.ImageBase as usize
-                && address < nt_headers.OptionalHeader.ImageBase as usize + self.image.len()
-        }
-    }
-
-    fn export_name_by_address(&self, address: usize) -> Option<&[u8]> {
-        unsafe {
-            let image_ptr = self.image.as_ptr() as usize;
-            let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
-            let nt_headers =
-                &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
-            let export_data_directory = &*(&nt_headers.OptionalHeader.DataDirectory
-                [IMAGE_DIRECTORY_ENTRY_EXPORT.0 as usize]
-                as *const IMAGE_DATA_DIRECTORY);
-            let export_directory = &*((image_ptr + export_data_directory.VirtualAddress as usize)
-                as *const IMAGE_EXPORT_DIRECTORY);
-            let functions = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfFunctions as usize) as *const u32,
-                export_directory.NumberOfFunctions as usize,
-            );
-            let names = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfNames as usize) as *const u32,
-                export_directory.NumberOfNames as usize,
-            );
-            let name_ordinals = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfNameOrdinals as usize) as *const u16,
-                export_directory.NumberOfNames as usize,
-            );
-
-            for (&name, &name_ordinal) in names.iter().zip(name_ordinals) {
-                let function = nt_headers.OptionalHeader.ImageBase as usize
-                    + functions[name_ordinal as usize] as usize;
-                if function != address {
-                    continue;
-                }
-
-                let name_ptr = (image_ptr + name as usize) as *const u8;
-                let mut name_end_ptr = name_ptr;
-                while *name_end_ptr != 0 {
-                    name_end_ptr = name_end_ptr.add(1)
-                }
-                let name_length = name_end_ptr.offset_from(name_ptr) as usize;
-                let name = std::slice::from_raw_parts(name_ptr, name_length + 1);
-                return Some(name);
-            }
-
-            None
-        }
-    }
-
-    fn export_name_by_forward(&self, forward: &[u8]) -> Option<&[u8]> {
-        unsafe {
-            let image_ptr = self.image.as_ptr() as usize;
-            let dos_headers = &*(image_ptr as *const IMAGE_DOS_HEADER);
-            let nt_headers =
-                &*((image_ptr + dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
-            let export_data_directory = &*(&nt_headers.OptionalHeader.DataDirectory
-                [IMAGE_DIRECTORY_ENTRY_EXPORT.0 as usize]
-                as *const IMAGE_DATA_DIRECTORY);
-            let export_directory = &*((image_ptr + export_data_directory.VirtualAddress as usize)
-                as *const IMAGE_EXPORT_DIRECTORY);
-            let functions = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfFunctions as usize) as *const u32,
-                export_directory.NumberOfFunctions as usize,
-            );
-            let names = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfNames as usize) as *const u32,
-                export_directory.NumberOfNames as usize,
-            );
-            let name_ordinals = std::slice::from_raw_parts(
-                (image_ptr + export_directory.AddressOfNameOrdinals as usize) as *const u16,
-                export_directory.NumberOfNames as usize,
-            );
-
-            for (&name, &name_ordinal) in names.iter().zip(name_ordinals) {
-                let function = functions[name_ordinal as usize] as usize;
-                if function < export_data_directory.VirtualAddress as usize
-                    || function
-                        >= (export_data_directory.VirtualAddress + export_data_directory.Size)
-                            as usize
-                {
-                    continue;
-                }
-
-                let mut forward_name = std::slice::from_raw_parts(
-                    (image_ptr + function) as *const u8,
-                    function - export_data_directory.VirtualAddress as usize
-                        + export_data_directory.Size as usize,
-                );
-                let forward_dll_name_end = forward_name.iter().position(|&c| c == b'.').unwrap();
-                let forward_name_end = forward_name.iter().position(|&c| c == 0).unwrap();
-                if forward != &forward_name[forward_dll_name_end + 1..forward_name_end + 1] {
-                    continue;
-                }
-
-                let name_ptr = (image_ptr + name as usize) as *const u8;
-                let mut name_end_ptr = name_ptr;
-                while *name_end_ptr != 0 {
-                    name_end_ptr = name_end_ptr.add(1)
-                }
-                let name_length = name_end_ptr.offset_from(name_ptr) as usize;
-                let name = std::slice::from_raw_parts(name_ptr, name_length + 1);
-                return Some(name);
-            }
-
-            None
-        }
-    }
 }
