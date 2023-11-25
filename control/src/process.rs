@@ -4,7 +4,6 @@ use std::{
     num::NonZeroU32,
     os::windows::ffi::OsStringExt,
     path::PathBuf,
-    sync::{Arc, Mutex},
 };
 
 use eframe::egui;
@@ -16,33 +15,10 @@ use windows::Win32::{
     },
 };
 
-#[derive(Default)]
 pub struct ProcessOverviewWindow {
-    inner: Arc<Mutex<ProcessOverviewWindowInner>>,
-}
-
-impl ProcessOverviewWindow {
-    pub fn value(&self) -> Option<NonZeroU32> {
-        self.inner.lock().unwrap().value
-    }
-
-    pub fn show(&self, ctx: &egui::Context) {
-        let inner = self.inner.clone();
-        ctx.show_viewport_deferred(
-            egui::ViewportId::from_hash_of("ProcessOverviewWindow"),
-            egui::ViewportBuilder::default()
-                .with_title("Open Process")
-                .with_inner_size([400.0, 600.0]),
-            move |ctx, class| {
-                inner.lock().unwrap().show(ctx);
-            },
-        );
-    }
-}
-
-struct ProcessOverviewWindowInner {
     items: Vec<ProcessOverview>,
-    value: Option<NonZeroU32>,
+
+    pub value: Option<NonZeroU32>,
 }
 
 struct ProcessOverview {
@@ -50,7 +26,7 @@ struct ProcessOverview {
     path: PathBuf,
 }
 
-impl Default for ProcessOverviewWindowInner {
+impl Default for ProcessOverviewWindow {
     fn default() -> Self {
         let mut _self = Self {
             items: Default::default(),
@@ -61,11 +37,8 @@ impl Default for ProcessOverviewWindowInner {
     }
 }
 
-impl ProcessOverviewWindowInner {
-    fn show(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) {
-            self.value = NonZeroU32::new(u32::MAX);
-        }
+impl ProcessOverviewWindow {
+    pub fn show(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.refresh();
         }
@@ -150,5 +123,3 @@ impl ProcessOverviewWindowInner {
         }
     }
 }
-
-
