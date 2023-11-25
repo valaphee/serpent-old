@@ -15,13 +15,13 @@ use windows::Win32::{
     },
 };
 
-pub struct ProcessOverviewView {
+pub struct ProcessOverview {
     items: Vec<Process>,
 
     pub value: Option<NonZeroU32>,
 }
 
-impl Default for ProcessOverviewView {
+impl Default for ProcessOverview {
     fn default() -> Self {
         let mut _self = Self {
             items: Default::default(),
@@ -32,7 +32,7 @@ impl Default for ProcessOverviewView {
     }
 }
 
-impl ProcessOverviewView {
+impl ProcessOverview {
     pub fn show(&mut self, ui: &mut egui::Ui) {
         if ui.input(|i| i.key_pressed(egui::Key::F5)) {
             self.refresh();

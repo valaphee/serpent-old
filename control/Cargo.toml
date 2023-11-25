@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+log = "0.4"
+env_logger = "0.10"
+
 eframe = "0.24"
 egui_extras = "0.24"
 egui_tiles = "0.4"
+rfd = "0.12"
 
 windows = { version = "0.52", features = [
     "Wdk_System_Threading",
@@ -17,3 +21,5 @@ windows = { version = "0.52", features = [
     "Win32_System_SystemServices",
     "Win32_System_Threading",
 ] }
+unicorn-engine = "2.0"
+iced-x86 = { version = "1.20", default-features = false, features = ["std", "decoder"] }
