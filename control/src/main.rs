@@ -2,9 +2,11 @@
 
 use eframe::{egui, Frame};
 
-use crate::process::ProcessOverviewWindow;
+use crate::{dump::DumpView, process::ProcessOverviewView, util::unique_id};
 
+mod dump;
 mod process;
+mod util;
 
 fn main() -> Result<(), eframe::Error> {
     let mut options = eframe::NativeOptions::default();
@@ -13,38 +15,44 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct App {
-    process_overview_window: Option<Box<ProcessOverviewWindow>>,
+    process_overview_view: Option<Box<ProcessOverviewView>>,
+    dump_view: Option<Box<DumpView>>,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
-            process_overview_window: Some(Default::default()),
+            process_overview_view: Some(Default::default()),
+            dump_view: None,
         }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
-        if let Some(window) = &mut self.process_overview_window {
-            if let Some(result) = window.value {
-                self.process_overview_window = None;
-            } else {
-                window.show(ctx);
-            }
-        } else {
-            egui::TopBottomPanel::top("main.rs:42").show(ctx, |ui| {
-                egui::menu::bar(ui, |ui| {
-                    ui.menu_button("File", |ui| {
-                        ui.button("Open");
-                        ui.button("Exit");
-                    });
-                    ui.menu_button("Help", |ui| {
-                        ui.button("About");
-                    });
+        egui::TopBottomPanel::top(unique_id!()).show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    ui.button("Open");
+                    ui.button("Exit");
+                });
+                ui.menu_button("Help", |ui| {
+                    ui.button("About");
                 });
             });
-            egui::CentralPanel::default().show(ctx, |ui| {});
-        }
+        });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if let Some(view) = &mut self.process_overview_view {
+                if let Some(value) = view.value {
+                    self.process_overview_view = None;
+                    self.dump_view = Some(Box::new(DumpView::open(value.get())));
+                } else {
+                    view.show(ui);
+                }
+            }
+            if let Some(view) = &mut self.dump_view {
+                view.show(ui);
+            }
+        });
     }
 }

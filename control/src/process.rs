@@ -15,18 +15,18 @@ use windows::Win32::{
     },
 };
 
-pub struct ProcessOverviewWindow {
-    items: Vec<ProcessOverview>,
+pub struct ProcessOverviewView {
+    items: Vec<Process>,
 
     pub value: Option<NonZeroU32>,
 }
 
-struct ProcessOverview {
+struct Process {
     id: u32,
     path: PathBuf,
 }
 
-impl Default for ProcessOverviewWindow {
+impl Default for ProcessOverviewView {
     fn default() -> Self {
         let mut _self = Self {
             items: Default::default(),
@@ -37,41 +37,38 @@ impl Default for ProcessOverviewWindow {
     }
 }
 
-impl ProcessOverviewWindow {
-    pub fn show(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
+impl ProcessOverviewView {
+    pub fn show(&mut self, ui: &mut egui::Ui) {
+        if ui.input(|i| i.key_pressed(egui::Key::F5)) {
             self.refresh();
         }
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui_extras::TableBuilder::new(ui)
-                .striped(true)
-                .auto_shrink([false, false])
-                .column(egui_extras::Column::auto().resizable(true))
-                .column(egui_extras::Column::remainder())
-                .header(12.0, |mut header| {
-                    header.col(|ui| {
-                        ui.label("PID");
+        egui_extras::TableBuilder::new(ui)
+            .striped(true)
+            .auto_shrink([false, false])
+            .column(egui_extras::Column::auto().resizable(true))
+            .column(egui_extras::Column::remainder())
+            .header(12.0, |mut header| {
+                header.col(|ui| {
+                    ui.label("PID");
+                });
+                header.col(|ui| {
+                    ui.label("Name");
+                });
+            })
+            .body(|mut body| {
+                body.rows(12.0, self.items.len(), |i, mut row| {
+                    let item = &self.items[i];
+                    row.col(|ui| {
+                        if ui.selectable_label(false, item.id.to_string()).clicked() {
+                            self.value = NonZeroU32::new(item.id);
+                            ui.ctx().request_repaint();
+                        }
                     });
-                    header.col(|ui| {
-                        ui.label("Name");
+                    row.col(|ui| {
+                        ui.label(item.path.file_name().unwrap().to_str().unwrap());
                     });
-                })
-                .body(|mut body| {
-                    body.rows(12.0, self.items.len(), |i, mut row| {
-                        let item = &self.items[i];
-                        row.col(|ui| {
-                            if ui.selectable_label(false, item.id.to_string()).clicked() {
-                                self.value = NonZeroU32::new(item.id);
-                                ctx.request_repaint_of(egui::ViewportId::default());
-                            }
-                        });
-                        row.col(|ui| {
-                            ui.label(item.path.file_name().unwrap().to_str().unwrap());
-                        });
-                    });
-                })
-        });
+                });
+            })
     }
 
     fn refresh(&mut self) {
@@ -115,7 +112,7 @@ impl ProcessOverviewWindow {
 
                 CloseHandle(process).unwrap();
 
-                self.items.push(ProcessOverview {
+                self.items.push(Process {
                     id: process_id,
                     path: process_path,
                 });
