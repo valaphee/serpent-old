@@ -7,6 +7,7 @@ use std::{
 };
 
 use eframe::egui;
+
 use windows::Win32::{
     Foundation::{CloseHandle, FALSE, MAX_PATH},
     System::{

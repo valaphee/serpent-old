@@ -1,6 +1,7 @@
-use windows::Win32::Foundation::HMODULE;
-use windows::Win32::System::LibraryLoader::DisableThreadLibraryCalls;
-use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
+use windows::Win32::{
+    Foundation::HMODULE,
+    System::{LibraryLoader::DisableThreadLibraryCalls, SystemServices::DLL_PROCESS_ATTACH},
+};
 
 #[no_mangle]
 unsafe extern "system" fn DllMain(

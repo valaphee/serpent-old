@@ -2,5 +2,6 @@
 resolver = "2"
 members = [
     "control",
+    "control_backend",
     "payload",
 ]

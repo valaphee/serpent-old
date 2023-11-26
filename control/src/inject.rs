@@ -6,12 +6,8 @@ pub struct Inject {
 
 impl Inject {
     pub fn new(process_id: u32) -> Self {
-        Self {
-            process_id
-        }
+        Self { process_id }
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui) {
-
-    }
+    pub fn show(&mut self, ui: &mut egui::Ui) {}
 }

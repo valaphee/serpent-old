@@ -24,17 +24,13 @@ use windows::Win32::System::{
     },
 };
 
-use crate::dump::{Dump, Module};
+use crate::dump::{Fixup, Module, Process};
 
-pub trait OverwatchDumpExt {
-    fn import_search(&mut self);
+pub struct ImportSearchFixup;
 
-    fn string_obfuscation(&mut self);
-}
-
-impl OverwatchDumpExt for Dump {
-    fn import_search(&mut self) {
-        let module = &self.modules[0];
+impl Fixup for ImportSearchFixup {
+    fn fixup(&self, process: &Process) {
+        let module = &process.modules[0];
         let image_ptr = module.image.as_ptr() as usize;
         let image_file_ptr = module.image_file.as_ref().unwrap().as_ptr() as usize;
 
@@ -77,7 +73,7 @@ impl OverwatchDumpExt for Dump {
             let mut heap: Vec<u8> = vec![0; page_max - page_min];
             for page in pages {
                 ReadProcessMemory(
-                    self.process,
+                    process.handle,
                     page as *const c_void,
                     heap.as_mut_ptr().add(page - page_min) as *mut _,
                     0x1000,
@@ -140,7 +136,7 @@ impl OverwatchDumpExt for Dump {
                 }
 
                 // Search for module containing the given address
-                let Some(module) = self.modules[1..]
+                let Some(module) = process.modules[1..]
                     .iter()
                     .find(|module| contains(module, iat[0]))
                 else {
@@ -174,8 +170,10 @@ impl OverwatchDumpExt for Dump {
                 for &address in iat {
                     let name = if let Some(name) = export_name_by_address(module, address) {
                         name
-                    } else if let Some(forward_module) =
-                        self.modules.iter().find(|module| contains(module, address))
+                    } else if let Some(forward_module) = process
+                        .modules
+                        .iter()
+                        .find(|module| contains(module, address))
                     {
                         if let Some(forward_name) = export_name_by_address(forward_module, address)
                         {
@@ -273,9 +271,13 @@ impl OverwatchDumpExt for Dump {
             .unwrap();
         }
     }
+}
 
-    fn string_obfuscation(&mut self) {
-        let module = &mut self.modules[0];
+pub struct StringObfuscationFixup;
+
+impl Fixup for StringObfuscationFixup {
+    fn fixup(&self, process: &Process) {
+        let module = &mut process.modules[0];
         let image = &mut module.image;
 
         let sections = unsafe {
@@ -297,7 +299,8 @@ impl OverwatchDumpExt for Dump {
         let end = begin + section.SizeOfRawData as usize;
         let mut i = begin;
         while i < end {
-            // All encrypted strings start with a byte which indicates if they are still encrypted
+            // All encrypted strings start with a byte which indicates if they are still
+            // encrypted
             if image[i] != 1 {
                 i += 1;
                 continue;
@@ -333,7 +336,10 @@ impl OverwatchDumpExt for Dump {
             // Try to decode UTF-16
             if length % 2 == 0 {
                 if let Ok(string) = String::from_utf16le(&image[i + 1..i + 1 + length]) {
-                    if string.chars().all(|c| !c.is_ascii_control() && c.is_ascii()) {
+                    if string
+                        .chars()
+                        .all(|c| !c.is_ascii_control() && c.is_ascii())
+                    {
                         debug!("Decrypted {string:?}");
 
                         // Mark string as decrypted
@@ -355,7 +361,9 @@ impl OverwatchDumpExt for Dump {
             };
 
             // Unlikely that a string contains ASCII control codes
-            if string.chars().any(|c| c.is_ascii_control() && !c.is_ascii_whitespace())
+            if string
+                .chars()
+                .any(|c| c.is_ascii_control() && !c.is_ascii_whitespace())
             {
                 // Undo xor and continue
                 for j in 0..length {

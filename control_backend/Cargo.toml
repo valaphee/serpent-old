@@ -1,0 +1,23 @@
+[package]
+name = "serpent_control_backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+env_logger = "0.10"
+
+windows = { version = "0.52", features = [
+    "Wdk_System_Threading",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_ProcessStatus",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+unicorn-engine = "2.0"
+iced-x86 = { version = "1.20", default-features = false, features = ["std", "decoder"] }

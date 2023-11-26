@@ -3,12 +3,12 @@
 
 use eframe::{egui, Frame};
 
-use crate::{dump::Dump, process::ProcessOverview, util::unique_id};
+use crate::{dump::DumpView, process::ProcessOverview, util::unique_id};
 
 mod dump;
+mod inject;
 mod process;
 mod util;
-mod inject;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init();
@@ -20,7 +20,7 @@ fn main() -> Result<(), eframe::Error> {
 
 struct App {
     process_overview_view: Option<Box<ProcessOverview>>,
-    dump_view: Option<Box<Dump>>,
+    dump_view: Option<Box<DumpView>>,
 }
 
 impl Default for App {
@@ -49,7 +49,7 @@ impl eframe::App for App {
             if let Some(view) = &mut self.process_overview_view {
                 if let Some(value) = view.value {
                     self.process_overview_view = None;
-                    self.dump_view = Some(Box::new(Dump::open(value.get())));
+                    self.dump_view = Some(Box::new(DumpView::new(value.get())));
                 } else {
                     view.show(ui);
                 }

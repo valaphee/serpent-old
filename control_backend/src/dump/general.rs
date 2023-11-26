@@ -10,15 +10,15 @@ use windows::Win32::System::{
     SystemServices::{IMAGE_BASE_RELOCATION, IMAGE_DOS_HEADER, IMAGE_REL_BASED_DIR64},
 };
 
-use crate::dump::Dump;
+use crate::dump::{Fixup, Process};
 
-pub trait GeneralDumpExt {
-    fn relocate(&mut self);
+pub struct RelocateFixup {
+    pub address: u64,
 }
 
-impl GeneralDumpExt for Dump {
-    fn relocate(&mut self) {
-        let module = &mut self.modules[0];
+impl Fixup for RelocateFixup {
+    fn fixup(&self, process: &Process) {
+        let module = &mut process.modules[0];
         let image = &mut module.image;
         let image_ptr = image.as_ptr() as usize;
         let image_file = module.image_file.as_ref().unwrap();
