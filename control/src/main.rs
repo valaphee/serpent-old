@@ -1,3 +1,4 @@
+#![feature(str_from_utf16_endian)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::{egui, Frame};

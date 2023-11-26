@@ -297,7 +297,7 @@ impl OverwatchDumpExt for Dump {
         let end = begin + section.SizeOfRawData as usize;
         let mut i = begin;
         while i < end {
-            // Encrypted?
+            // All encrypted strings start with a byte which indicates if they are still encrypted
             if image[i] != 1 {
                 i += 1;
                 continue;
@@ -307,19 +307,19 @@ impl OverwatchDumpExt for Dump {
                 | ((image[i - 2] as u32) << 8)
                 | ((image[i - 1] as u32) << 16)) as usize;
 
-            // Empty?
+            // Empty values are of no use
             if length == 0 {
                 i += 1;
                 continue;
             }
 
-            // Longer than total length?
+            // Length can't be longer then the size of the section
             if i + 1 + length >= end {
                 i += 1;
                 continue;
             }
 
-            // Null-terminated?
+            // All encrypted strings seem to be still null-terminated
             if image[i + 1 + length] != 0 {
                 i += 1;
                 continue;
@@ -330,9 +330,23 @@ impl OverwatchDumpExt for Dump {
                 image[i + 1 + j] ^= image[i - 3 - 8 + (j % 8)];
             }
 
-            // Try to decode
+            // Try to decode UTF-16
+            if length % 2 == 0 {
+                if let Ok(string) = String::from_utf16le(&image[i + 1..i + 1 + length]) {
+                    if string.chars().all(|c| !c.is_ascii_control() && c.is_ascii()) {
+                        debug!("Decrypted {string:?}");
+
+                        // Mark string as decrypted
+                        image[i] = 0;
+                        i += length;
+                        continue;
+                    }
+                }
+            }
+
+            // Try to decode UTF-8
             let Ok(string) = std::str::from_utf8(&image[i + 1..i + 1 + length]) else {
-                // Undo xor
+                // Undo xor and continue
                 for j in 0..length {
                     image[i + 1 + j] ^= image[i - 3 - 8 + (j % 8)];
                 }
@@ -340,11 +354,10 @@ impl OverwatchDumpExt for Dump {
                 continue;
             };
 
-            // Contains non-whitespace control characters?
-            if string
-                .contains(|value: char| value.is_ascii_control() && !value.is_ascii_whitespace())
+            // Unlikely that a string contains ASCII control codes
+            if string.chars().any(|c| c.is_ascii_control() && !c.is_ascii_whitespace())
             {
-                // Undo xor
+                // Undo xor and continue
                 for j in 0..length {
                     image[i + 1 + j] ^= image[i - 3 - 8 + (j % 8)];
                 }
@@ -352,6 +365,9 @@ impl OverwatchDumpExt for Dump {
                 continue;
             }
 
+            debug!("Decrypted {string:?}");
+
+            // Mark string as decrypted
             image[i] = 0;
             i += length;
         }
