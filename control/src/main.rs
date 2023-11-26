@@ -8,6 +8,7 @@ use crate::{dump::Dump, process::ProcessOverview, util::unique_id};
 mod dump;
 mod process;
 mod util;
+mod inject;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init();

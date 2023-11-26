@@ -23,7 +23,6 @@ use crate::dump::{general::GeneralDumpExt, overwatch::OverwatchDumpExt};
 mod general;
 mod overwatch;
 
-#[derive(Default)]
 pub struct Dump {
     process: HANDLE,
     modules: Vec<Module>,
@@ -34,7 +33,7 @@ impl Dump {
         let process;
         let mut modules = Vec::new();
         unsafe {
-            debug!("Opening process {process_id}...");
+            debug!("Opening process {process_id}");
             process = OpenProcess(
                 PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
                 FALSE,
@@ -173,17 +172,17 @@ impl Dump {
                 &*((image_ptr + memory_dos_headers.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
 
             // Use image file header because image header might be altered
-            let dos_headers = &*(image_file_ptr as *const IMAGE_DOS_HEADER);
-            let nt_headers = &*((image_file_ptr + dos_headers.e_lfanew as usize)
+            let file_dos_headers = &*(image_file_ptr as *const IMAGE_DOS_HEADER);
+            let file_nt_headers = &*((image_file_ptr + file_dos_headers.e_lfanew as usize)
                 as *const IMAGE_NT_HEADERS64);
             let sections = std::slice::from_raw_parts(
-                addr_of!(*nt_headers).add(1) as *const IMAGE_SECTION_HEADER,
-                nt_headers.FileHeader.NumberOfSections as usize,
+                addr_of!(*file_nt_headers).add(1) as *const IMAGE_SECTION_HEADER,
+                file_nt_headers.FileHeader.NumberOfSections as usize,
             );
 
             // Copy header
             result.extend_from_slice(
-                &image_file[..nt_headers.OptionalHeader.SizeOfHeaders as usize],
+                &image_file[..file_nt_headers.OptionalHeader.SizeOfHeaders as usize],
             );
 
             // Copy sections
