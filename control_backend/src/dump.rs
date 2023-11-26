@@ -166,5 +166,5 @@ pub struct Module {
 }
 
 pub trait Fixup {
-    fn fixup(&self, process: &Process);
+    fn fixup(&self, process: &mut Process);
 }

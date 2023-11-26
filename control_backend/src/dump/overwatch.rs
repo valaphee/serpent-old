@@ -29,7 +29,7 @@ use crate::dump::{Fixup, Module, Process};
 pub struct ImportSearchFixup;
 
 impl Fixup for ImportSearchFixup {
-    fn fixup(&self, process: &Process) {
+    fn fixup(&self, process: &mut Process) {
         let module = &process.modules[0];
         let image_ptr = module.image.as_ptr() as usize;
         let image_file_ptr = module.image_file.as_ref().unwrap().as_ptr() as usize;
@@ -276,7 +276,7 @@ impl Fixup for ImportSearchFixup {
 pub struct StringObfuscationFixup;
 
 impl Fixup for StringObfuscationFixup {
-    fn fixup(&self, process: &Process) {
+    fn fixup(&self, process: &mut Process) {
         let module = &mut process.modules[0];
         let image = &mut module.image;
 

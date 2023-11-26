@@ -58,12 +58,12 @@ impl DumpView {
                         });
                     });
                 });
-            if ui.button("Save").clicked() {
+            if ui.button("Dump").clicked() {
                 if let Some(path) = rfd::FileDialog::new().save_file() {
                     //dump::general::RelocateFixup.fixup(&self.dump);
-                    dump::overwatch::ImportSearchFixup.fixup(&self.dump);
-                    dump::overwatch::StringObfuscationFixup.fixup(&self.dump);
-                    std::fs::write(path, self.build()).unwrap();
+                    dump::overwatch::ImportSearchFixup.fixup(&mut self.dump);
+                    dump::overwatch::StringObfuscationFixup.fixup(&mut self.dump);
+                    std::fs::write(path, self.dump.build()).unwrap();
                 }
             }
         });

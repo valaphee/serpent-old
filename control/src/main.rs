@@ -1,9 +1,9 @@
 #![feature(str_from_utf16_endian)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use eframe::{egui, Frame};
+use eframe::egui;
 
-use crate::{dump::DumpView, process::ProcessOverview, util::unique_id};
+use crate::{inject::InjectView, process::ProcessOverview, util::unique_id};
 
 mod dump;
 mod inject;
@@ -20,7 +20,7 @@ fn main() -> Result<(), eframe::Error> {
 
 struct App {
     process_overview_view: Option<Box<ProcessOverview>>,
-    dump_view: Option<Box<DumpView>>,
+    dump_view: Option<Box<InjectView>>,
 }
 
 impl Default for App {
@@ -33,7 +33,7 @@ impl Default for App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut egui::Frame) {
         egui::TopBottomPanel::top(unique_id!()).show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -49,7 +49,7 @@ impl eframe::App for App {
             if let Some(view) = &mut self.process_overview_view {
                 if let Some(value) = view.value {
                     self.process_overview_view = None;
-                    self.dump_view = Some(Box::new(DumpView::new(value.get())));
+                    self.dump_view = Some(Box::new(InjectView::new(value.get())));
                 } else {
                     view.show(ui);
                 }

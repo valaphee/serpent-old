@@ -17,7 +17,7 @@ pub struct RelocateFixup {
 }
 
 impl Fixup for RelocateFixup {
-    fn fixup(&self, process: &Process) {
+    fn fixup(&self, process: &mut Process) {
         let module = &mut process.modules[0];
         let image = &mut module.image;
         let image_ptr = image.as_ptr() as usize;

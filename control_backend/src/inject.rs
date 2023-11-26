@@ -10,18 +10,19 @@ use windows::{
             Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE},
             Threading::{
                 CreateRemoteThread, OpenProcess, WaitForSingleObject, INFINITE,
-                PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, THREAD_CREATE_RUN_IMMEDIATELY,
+                PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+                THREAD_CREATE_RUN_IMMEDIATELY,
             },
         },
     },
 };
 
 pub fn load_library(process_id: u32, path: impl AsRef<Path>) {
-    let path = HSTRING::from(path.as_ref());
+    let path = HSTRING::from(path.as_ref().canonicalize().unwrap().to_str().unwrap());
     let path = path.as_wide();
     unsafe {
         let process = OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+            PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
             FALSE,
             process_id,
         )
@@ -41,8 +42,10 @@ pub fn load_library(process_id: u32, path: impl AsRef<Path>) {
             None,
         )
         .unwrap();
-        let load_library_w =
-            GetProcAddress(GetModuleHandleA(s!("kernel32.dll"))?, s!("LoadLibraryW"));
+        let load_library_w = GetProcAddress(
+            GetModuleHandleA(s!("kernel32.dll")).unwrap(),
+            s!("LoadLibraryW"),
+        );
         let load_library_thread = CreateRemoteThread(
             process,
             None,

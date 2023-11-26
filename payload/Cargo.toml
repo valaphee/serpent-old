@@ -10,6 +10,7 @@ env_logger = "0.10"
 eframe = "0.24"
 
 windows = { version = "0.52", features = [
+    "Win32_Foundation",
     "Win32_System_LibraryLoader",
     "Win32_System_SystemServices",
 ] }
